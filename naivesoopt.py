@@ -122,53 +122,53 @@ class NaiveSecondOrderOptimizer:
             self.F = T.tensordot(self.grad2d_vec.dimshuffle(0, 2, 1),
                                  self.grad2d_vec.dimshuffle(0, 1, 2), [(0, 2), (0, 1)])/T.cast(self.grad2d_vec.shape[0], theano.config.floatX)
         elif self.algo.startswith('kr'):
-            self.grads = []
-            # self.acts = [T.concatenate([self.model.x, T.ones((self.model.x.shape[0], 1))], axis=1)]
-            self.acts = [self.model.x]
-            for l in self.model.layers:
-                cg = T.grad(self.f_loss, l.s)
-                self.grads.append(cg)
-                # self.acts.append(T.concatenate([l.a, T.ones((l.a.shape[0], 1))], axis=1))
-                self.acts.append(l.a)
+        self.grads = []
+        # self.acts = [T.concatenate([self.model.x, T.ones((self.model.x.shape[0], 1))], axis=1)]
+        self.acts = [self.model.x]
+        for l in self.model.layers:
+            cg = T.grad(self.f_loss, l.s)
+            self.grads.append(cg)
+            # self.acts.append(T.concatenate([l.a, T.ones((l.a.shape[0], 1))], axis=1))
+            self.acts.append(l.a)
 
-            self.G = []
-            self.A = []
-            self.F_block = []
-            self.F = []
+        self.G = []
+        self.A = []
+        self.F_block = []
+        self.F = []
 
-            cnt = T.cast(self.grads[0].shape[0], theano.config.floatX)
-            for i in range(len(self.grads)):
-                self.G += [[]]
-                self.A += [[]]
-                for j in range(len(self.grads)):
-                    # self.G[-1] += [T.mean(T.batched_dot(self.grads[i].dimshuffle(0, 1, 'x'), self.grads[j].dimshuffle(0, 'x', 1)), 0).dimshuffle('x', 0, 1)]
-                    # self.A[-1] += [T.mean(T.batched_dot(self.acts[i].dimshuffle(0, 1, 'x'), self.acts[j].dimshuffle(0, 'x', 1)), 0).dimshuffle('x', 0, 1)]
+        cnt = T.cast(self.grads[0].shape[0], theano.config.floatX)
+        for i in range(len(self.grads)):
+            self.G += [[]]
+            self.A += [[]]
+            for j in range(len(self.grads)):
+                # self.G[-1] += [T.mean(T.batched_dot(self.grads[i].dimshuffle(0, 1, 'x'), self.grads[j].dimshuffle(0, 'x', 1)), 0).dimshuffle('x', 0, 1)]
+                # self.A[-1] += [T.mean(T.batched_dot(self.acts[i].dimshuffle(0, 1, 'x'), self.acts[j].dimshuffle(0, 'x', 1)), 0).dimshuffle('x', 0, 1)]
 
-                    # self.G[-1] += [T.batched_dot(self.grads[i].dimshuffle(0, 1, 'x'), self.grads[j].dimshuffle(0, 'x', 1))]
-                    # self.A[-1] += [T.batched_dot(self.acts[i].dimshuffle(0, 1, 'x'), self.acts[j].dimshuffle(0, 'x', 1))]
+                # self.G[-1] += [T.batched_dot(self.grads[i].dimshuffle(0, 1, 'x'), self.grads[j].dimshuffle(0, 'x', 1))]
+                # self.A[-1] += [T.batched_dot(self.acts[i].dimshuffle(0, 1, 'x'), self.acts[j].dimshuffle(0, 'x', 1))]
 
-                    self.G[-1] += [self.grads[i].T.dot(self.grads[j]).dimshuffle('x', 0, 1)/cnt]
-                    self.A[-1] += [self.acts[i].T.dot(self.acts[j]).dimshuffle('x', 0, 1)/cnt]
+                self.G[-1] += [self.grads[i].T.dot(self.grads[j]).dimshuffle('x', 0, 1)/cnt]
+                self.A[-1] += [self.acts[i].T.dot(self.acts[j]).dimshuffle('x', 0, 1)/cnt]
 
-                    if self.algo.endswith('diag'):
-                        self.G[-1][-1] *= float(i==j)
-                        self.A[-1][-1] *= float(i==j)
+                if self.algo.endswith('diag'):
+                    self.G[-1][-1] *= float(i==j)
+                    self.A[-1][-1] *= float(i==j)
 
 
-            for i in range(len(self.grads)):
-                self.F_block += [[]]
-                for j in range(len(self.grads)):
-                    # depends on whether you want to compute the real fisher with this or the kr approximation
-                    # since numpy-base fast_kron somehow computes 3d tensors faster than theano
+        for i in range(len(self.grads)):
+            self.F_block += [[]]
+            for j in range(len(self.grads)):
+                # depends on whether you want to compute the real fisher with this or the kr approximation
+                # since numpy-base fast_kron somehow computes 3d tensors faster than theano
 
-                    # cblock = fast_kron(self.A[i][j], self.G[i][j])
-                    cblock = native_kron(self.A[i][j], self.G[i][j])
+                # cblock = fast_kron(self.A[i][j], self.G[i][j])
+                cblock = native_kron(self.A[i][j], self.G[i][j])
 
-                    cblock = cblock.reshape(cblock.shape[1:], ndim=2)
-                    self.F_block[i] += [cblock]
-                self.F.append(T.concatenate(self.F_block[-1], axis=1))
-            self.F = T.concatenate(self.F, axis=0)
-            self.F = (self.F+self.F.T)/2
+                cblock = cblock.reshape(cblock.shape[1:], ndim=2)
+                self.F_block[i] += [cblock]
+            self.F.append(T.concatenate(self.F_block[-1], axis=1))
+        self.F = T.concatenate(self.F, axis=0)
+        self.F = (self.F+self.F.T)/2
 
 
         self.Fdamp = self.F+T.identity_like(self.F)*self.lambd_inv
